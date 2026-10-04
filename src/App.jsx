@@ -40,8 +40,8 @@ const parseDiscordMarkdown = (text) => {
   });
 };
 
-const PostCardRenderer = ({ title, content, image, date, exportRef }) => {
-  const [page, setPage] = useState(1);
+const PostCardRenderer = ({ title, content, image, date, exportRef, initialPage = 1 }) => {
+  const [page, setPage] = useState(initialPage);
   const hasImage = !!image;
 
   const len = (content || '').length;
@@ -153,30 +153,36 @@ const AdminReview = ({ posts, pagination, filters, setFilters, handleStatusChang
   const [activeTab, setActiveTab] = useState('pending');
   const [editingPost, setEditingPost] = useState(null);
   const [exportPost, setExportPost] = useState(null);
-  const exportRef = useRef(null);
+  const documentRef = useRef(null);
+  const attachmentRef = useRef(null);
+
+  const downloadPng = async (node, filename) => {
+    const dataUrl = await toPng(node, { pixelRatio: 2, cacheBust: true });
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
 
   useEffect(() => {
-    if (!exportPost || !exportRef.current) return;
+    if (!exportPost || !documentRef.current || (exportPost.image && !attachmentRef.current)) return;
     let cancelled = false;
     const download = async () => {
       try {
         await document.fonts.ready;
-        const dataUrl = await toPng(exportRef.current, { pixelRatio: 2, cacheBust: true });
-        if (cancelled) return;
-        const documentLink = document.createElement('a');
-        documentLink.href = dataUrl;
-        documentLink.download = `tianmu-post-${exportPost.id}-document.png`;
-        documentLink.click();
-        if (exportPost.image) await handleDownloadIGImage(exportPost.id);
+        await downloadPng(documentRef.current, `tianmu-post-${exportPost.id}-document.png`);
+        if (exportPost.image) await downloadPng(attachmentRef.current, `tianmu-post-${exportPost.id}-attachment.png`);
       } catch (error) {
-        alert('文檔圖片產生失敗，請稍後再試。');
+        alert('圖片產生失敗，請稍後再試。');
       } finally {
         if (!cancelled) setExportPost(null);
       }
     };
     download();
     return () => { cancelled = true; };
-  }, [exportPost, handleDownloadIGImage]);
+  }, [exportPost]);
 
   const filteredPosts = (posts || []).filter(p => activeTab === 'approved' ? (p.status === 'approved' || p.status === 'published') : p.status === activeTab);
   const pendingCount = (posts || []).filter(p => p.status === 'pending').length;
@@ -187,7 +193,8 @@ const AdminReview = ({ posts, pagination, filters, setFilters, handleStatusChang
     <div className="animate-[fadeIn_0.5s_ease-out]">
       {exportPost && (
         <div className="fixed left-[-10000px] top-0 w-[768px] pointer-events-none" aria-hidden="true">
-          <PostCardRenderer exportRef={exportRef} title={exportPost.title} content={exportPost.content} image={exportPost.image} date={exportPost.date} />
+          <PostCardRenderer exportRef={documentRef} title={exportPost.title} content={exportPost.content} date={exportPost.date} />
+          {exportPost.image && <PostCardRenderer exportRef={attachmentRef} title={exportPost.title} content={exportPost.content} image={exportPost.image} date={exportPost.date} initialPage={2} />}
         </div>
       )}
       <div className="flex gap-2 md:gap-4 mb-4 md:mb-6 overflow-x-auto pb-2">
