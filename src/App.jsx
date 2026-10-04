@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { toPng } from 'html-to-image';
 import { Menu, X, ArrowRight, ArrowDown, Send, Image as ImageIcon, Eye, Terminal, Star, Edit2, Check, Trash2, Instagram, LogOut, Lock, LayoutDashboard, FileText, Settings, ScrollText, Mail, Clock, PenTool } from 'lucide-react';
 import api from './utils/api';
 
@@ -39,7 +40,7 @@ const parseDiscordMarkdown = (text) => {
   });
 };
 
-const PostCardRenderer = ({ title, content, image, date }) => {
+const PostCardRenderer = ({ title, content, image, date, exportRef }) => {
   const [page, setPage] = useState(1);
   const hasImage = !!image;
 
@@ -58,7 +59,7 @@ const PostCardRenderer = ({ title, content, image, date }) => {
 
   return (
     <div className="flex flex-col items-center w-full my-4">
-      <div className="w-full max-w-2xl aspect-[4/3] bg-white border-[4px] md:border-8 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] md:shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] relative flex flex-col overflow-hidden group transition-all duration-300">
+      <div ref={exportRef} className="w-full max-w-2xl aspect-[4/3] bg-white border-[4px] md:border-8 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] md:shadow-[16px_16px_0px_0px_rgba(0,0,0,1)] relative flex flex-col overflow-hidden group transition-all duration-300">
         {page === 1 ? (
           <div className="flex flex-col h-full p-4 md:p-10 relative z-10 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
              <h3 className="text-2xl md:text-5xl font-black mb-3 md:mb-6 truncate tracking-tight">{title || '天母匿名'}</h3>
@@ -151,6 +152,31 @@ const AdminDashboard = ({ stats, igStatus, loading, error, onRetry }) => {
 const AdminReview = ({ posts, pagination, filters, setFilters, handleStatusChange, handleSaveEdit, handleDownloadIGImage, handleCopyIGTitle }) => {
   const [activeTab, setActiveTab] = useState('pending');
   const [editingPost, setEditingPost] = useState(null);
+  const [exportPost, setExportPost] = useState(null);
+  const exportRef = useRef(null);
+
+  useEffect(() => {
+    if (!exportPost || !exportRef.current) return;
+    let cancelled = false;
+    const download = async () => {
+      try {
+        await document.fonts.ready;
+        const dataUrl = await toPng(exportRef.current, { pixelRatio: 2, cacheBust: true });
+        if (cancelled) return;
+        const documentLink = document.createElement('a');
+        documentLink.href = dataUrl;
+        documentLink.download = `tianmu-post-${exportPost.id}-document.png`;
+        documentLink.click();
+        if (exportPost.image) await handleDownloadIGImage(exportPost.id);
+      } catch (error) {
+        alert('文檔圖片產生失敗，請稍後再試。');
+      } finally {
+        if (!cancelled) setExportPost(null);
+      }
+    };
+    download();
+    return () => { cancelled = true; };
+  }, [exportPost, handleDownloadIGImage]);
 
   const filteredPosts = (posts || []).filter(p => activeTab === 'approved' ? (p.status === 'approved' || p.status === 'published') : p.status === activeTab);
   const pendingCount = (posts || []).filter(p => p.status === 'pending').length;
@@ -159,6 +185,11 @@ const AdminReview = ({ posts, pagination, filters, setFilters, handleStatusChang
 
   return (
     <div className="animate-[fadeIn_0.5s_ease-out]">
+      {exportPost && (
+        <div className="fixed left-[-10000px] top-0 w-[768px] pointer-events-none" aria-hidden="true">
+          <PostCardRenderer exportRef={exportRef} title={exportPost.title} content={exportPost.content} image={exportPost.image} date={exportPost.date} />
+        </div>
+      )}
       <div className="flex gap-2 md:gap-4 mb-4 md:mb-6 overflow-x-auto pb-2">
         <button
           onClick={() => { setActiveTab('pending'); setEditingPost(null); updateFilter('status', 'pending'); }}
@@ -228,7 +259,7 @@ const AdminReview = ({ posts, pagination, filters, setFilters, handleStatusChang
                       <div className="w-full">
                         <div className="text-center font-black text-sm md:text-lg mb-2 md:mb-3">Instagram 手動發布</div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-4">
-                          <button onClick={() => handleDownloadIGImage(post.id)} className="w-full flex items-center justify-center gap-2 bg-black text-white px-3 py-3 md:px-4 md:py-4 font-black text-sm md:text-xl border-[3px] md:border-4 border-black hover:bg-pink-600 active:translate-y-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] md:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none transition-all">
+                          <button onClick={() => setExportPost(post)} className="w-full flex items-center justify-center gap-2 bg-black text-white px-3 py-3 md:px-4 md:py-4 font-black text-sm md:text-xl border-[3px] md:border-4 border-black hover:bg-pink-600 active:translate-y-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] md:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none transition-all">
                             <Instagram size={18} className="md:w-6 md:h-6 shrink-0" /> <span className="truncate">下載圖片</span>
                           </button>
                           <button onClick={() => handleCopyIGTitle(post.date)} className="w-full flex items-center justify-center gap-2 bg-white text-black px-3 py-3 md:px-4 md:py-4 font-black text-sm md:text-xl border-[3px] md:border-4 border-black hover:bg-blue-50 active:translate-y-1 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] md:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none transition-all">
