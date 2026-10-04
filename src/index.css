@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .mix-blend-screen {
+    mix-blend-mode: screen;
+  }
+  .mix-blend-multiply {
+    mix-blend-mode: multiply;
+  }
+}
