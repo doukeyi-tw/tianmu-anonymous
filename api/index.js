@@ -6,6 +6,20 @@ import { uploadImage, removeImage } from './_blob.js';
 export const config = { api: { bodyParser: false, responseLimit: '5mb' } };
 const rate = new Map();
 const statuses = new Set(['pending', 'approved', 'rejected', 'published']);
+let schemaPromise;
+
+async function ensureSchema(pool) {
+  if (!schemaPromise) {
+    schemaPromise = (async () => {
+      await pool.query('alter table posts add column if not exists client_ip varchar(64)');
+      await pool.query('alter table posts add column if not exists client_user_agent varchar(512)');
+      await pool.query('alter table audit_logs add column if not exists request_ip varchar(64)');
+      await pool.query('alter table audit_logs add column if not exists request_user_agent varchar(512)');
+      await pool.query(`create table if not exists post_status_history (id bigserial primary key, post_id bigint not null references posts(id) on delete cascade, from_status varchar(20), to_status varchar(20) not null, admin_id bigint references admins(id) on delete set null, created_at timestamptz not null default now())`);
+    })().catch(error => { schemaPromise = null; throw error; });
+  }
+  return schemaPromise;
+}
 
 function json(res, status, value) { res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8').end(JSON.stringify(value)); }
 function errorStatus(error) { return error.status || ({ UNAUTHORIZED: 401, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_IMAGE_TYPE: 400, INVALID_IMAGE_CONTENT: 400, LIMIT_FILE_SIZE: 413, PAYLOAD_TOO_LARGE: 413, POST_DISABLED: 409, RATE_LIMITED: 429, INVALID_INPUT: 400, INVALID_JSON: 400, INVALID_MULTIPART: 400, BLOB_UNAVAILABLE: 503, DATABASE_UNAVAILABLE: 503, AUTH_SECRET_UNAVAILABLE: 503, INSTAGRAM_NOT_CONFIGURED: 503 }[error.message] || 500); }
@@ -36,6 +50,7 @@ function adminPostDto(row) { return { ...postDto(row), ip: row.client_ip || null
 async function handlePostSubmission(req, res) {
   checkPostRate(req);
   const pool = getPool();
+  await ensureSchema(pool);
   if (await setting(pool, 'isPostEnabled', true) === false) throw Object.assign(new Error('POST_DISABLED'), { status: 409 });
   const { fields, image } = await readMultipart(req);
   const text = validateText(fields.title, fields.content);
@@ -102,6 +117,7 @@ async function posts(req, res, admin) {
 
 async function postDetail(req, res, admin, id) {
   const pool = getPool();
+  await ensureSchema(pool);
   const post = await pool.query('select * from posts where id = $1', [id]);
   if (!post.rowCount) throw Object.assign(new Error('NOT_FOUND'), { status: 404 });
   const history = await pool.query('select id, from_status as "fromStatus", to_status as "toStatus", created_at as "createdAt" from post_status_history where post_id = $1 order by created_at desc', [id]);
@@ -120,6 +136,7 @@ async function updateStatus(req, res, admin, id) {
   const body = await readJson(req);
   if (!statuses.has(body.status) || body.status === 'pending') throw Object.assign(new Error('INVALID_INPUT'), { status: 400 });
   const pool = getPool();
+  await ensureSchema(pool);
   const client = await pool.connect();
   try {
     await client.query('begin');
