@@ -1,5 +1,5 @@
 import { getPool } from './_db.js';
-import { issueToken, verifyPassword, requireAdmin } from './_auth.js';
+import { issueToken, verifyPassword, requireAdmin, hashPassword } from './_auth.js';
 import { readJson, readMultipart } from './_body.js';
 import { uploadImage, removeImage } from './_blob.js';
 
@@ -66,10 +66,17 @@ async function login(req, res) {
   const body = await readJson(req);
   if (typeof body.username !== 'string' || typeof body.password !== 'string' || body.username.length > 100 || body.password.length > 200) throw Object.assign(new Error('INVALID_INPUT'), { status: 400 });
   const pool = getPool();
-  const result = await pool.query('select id, username, password_hash from admins where username = $1', [body.username.trim()]);
-  const admin = result.rows[0];
+  let result = await pool.query('select id, username, password_hash from admins where username = $1', [body.username.trim()]);
+  let admin = result.rows[0];
+  const configuredUsername = process.env.ADMIN_USERNAME?.trim();
+  const configuredPassword = process.env.ADMIN_PASSWORD;
+  if (configuredUsername && configuredPassword && body.username.trim() === configuredUsername && body.password === configuredPassword) {
+    const passwordHash = await hashPassword(configuredPassword);
+    result = await pool.query('insert into admins (username, password_hash) values ($1, $2) on conflict (username) do update set password_hash = excluded.password_hash returning id, username, password_hash', [configuredUsername, passwordHash]);
+    admin = result.rows[0];
+  }
   if (!admin || !(await verifyPassword(body.password, admin.password_hash))) throw Object.assign(new Error('UNAUTHORIZED'), { status: 401 });
-  await log(pool, admin.id, 'SUCCESS', '管理員登入');
+  await log(pool, admin.id, 'SUCCESS', '管理員登入', null, req);
   return json(res, 200, { token: issueToken(admin), admin: { id: admin.id, username: admin.username } });
 }
 
