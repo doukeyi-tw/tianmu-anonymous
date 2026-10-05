@@ -10,7 +10,8 @@
     "test": "vitest run",
     "dev:api": "vercel dev",
     "provision-admin": "node scripts/provision-admin.mjs",
-    "migrate": "node scripts/migrate.mjs"
+    "migrate": "node scripts/migrate.mjs",
+    "build:vercel": "vite build"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

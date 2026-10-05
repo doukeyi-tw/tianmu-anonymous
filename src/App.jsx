@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { Menu, X, ArrowRight, ArrowDown, Send, Image as ImageIcon, Eye, Terminal, Star, Edit2, Check, Trash2, Instagram, LogOut, Lock, LayoutDashboard, FileText, Settings, ScrollText, Mail, Clock, PenTool } from 'lucide-react';
+import { Menu, X, ArrowRight, ArrowDown, Send, Image as ImageIcon, Eye, Terminal, Star, Edit2, Check, Trash2, Instagram, LogOut, Lock, LayoutDashboard, FileText, Settings, ScrollText, Mail, Clock, PenTool, ShieldCheck, History } from 'lucide-react';
 import api from './utils/api';
 
 const parseDiscordMarkdown = (text) => {
@@ -94,6 +94,31 @@ const PostCardRenderer = ({ title, content, image, date, exportRef, initialPage 
       )}
     </div>
   );
+};
+
+const PolicyModal = ({ page, onClose }) => {
+  const content = {
+    guidelines: ['尊重每個人，不做人身攻擊、霸凌或惡意起鬨。', '禁止違法、威脅、仇恨、色情、詐騙與危險內容。', '不要公開他人的姓名、班級、照片、電話、住址等個資，也不要肉搜或騷擾。'],
+    terms: ['投稿者需要對自己送出的文字與圖片負責，並遵守社群守則。', '投稿會先由管理員審核；管理員可以編輯、拒絕或移除不適當內容。', '服務依現況提供，通過審核的內容可能發布於網站或 Instagram；本網站不保證服務永遠不中斷。'],
+    privacy: ['我們只保留投稿內容、上傳圖片，以及防止濫用與維持服務所需的基本技術記錄。', '資料只用於審核、發布、維護與安全處理，不會任意公開投稿者身分或個人資料。', '記錄會在合理期限後清理；若有隱私問題，可透過頁尾信箱聯絡我們。']
+  }[page];
+  const titles = { guidelines: '社群守則', terms: '使用條款', privacy: '隱私政策' };
+  return <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-3" onClick={onClose}><div className="bg-white w-full max-w-2xl border-4 border-black shadow-[12px_12px_0px_0px_rgba(37,99,235,1)] max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}><div className="bg-black text-white p-3 flex justify-between items-center"><span className="font-black flex items-center gap-2"><ShieldCheck size={18} className="text-blue-400" />{titles[page]}</span><button onClick={onClose} className="font-black px-3 text-lg">x</button></div><div className="p-6 md:p-10 overflow-y-auto space-y-4 bg-[linear-gradient(transparent_95%,#f3f4f6_95%)] [background-size:100%_32px]">{content.map((item, i) => <p key={i} className="font-bold text-sm md:text-lg leading-relaxed">{item}</p>)}</div></div></div>;
+};
+
+const AdminReviewCompact = ({ posts, pagination, filters, setFilters, onRefresh }) => {
+  const [detail, setDetail] = useState(null);
+  const statuses = (filters.status || '').split(',');
+  const items = (posts || []).filter(post => statuses.includes(post.status));
+  const open = async post => { try { const result = await api.get(`/admin/posts/${post.id}`); setDetail(result.data); } catch { setDetail(post); } };
+  const update = (key, value) => setFilters(current => ({ ...current, [key]: value, page: 1 }));
+  return <div className="space-y-4">
+    <div className="flex gap-2 overflow-x-auto"><button onClick={() => update('status','pending')} className={`px-4 py-2 border-4 border-black font-black ${filters.status==='pending'?'bg-black text-white':'bg-white'}`}>待審核</button><button onClick={() => update('status','approved,published,rejected')} className={`px-4 py-2 border-4 border-black font-black ${filters.status!=='pending'?'bg-black text-white':'bg-white'}`}>投稿歷史</button></div>
+    <div className="bg-white border-4 border-black p-3 grid grid-cols-2 md:grid-cols-4 gap-2"><input value={filters.q} onChange={e => update('q',e.target.value)} placeholder="搜尋標題／內容" className="border-2 border-black p-2 font-bold text-sm" /><select value={filters.type} onChange={e => update('type',e.target.value)} className="border-2 border-black p-2 font-bold text-sm"><option value="">全部類型</option><option value="image">有圖片</option><option value="text">純文字</option></select><input type="date" value={filters.from} onChange={e => update('from',e.target.value)} className="border-2 border-black p-2 font-bold text-sm" /><input type="date" value={filters.to} onChange={e => update('to',e.target.value)} className="border-2 border-black p-2 font-bold text-sm" /></div>
+    <div className="bg-white border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"><div className="hidden md:grid grid-cols-[110px_1fr_60px_90px_110px] gap-2 bg-black text-white px-3 py-2 text-xs font-black"><span>日期／ID</span><span>標題／摘要</span><span>圖片</span><span>狀態</span><span>IP</span></div>{items.length ? items.map(post => <button key={post.id} onClick={() => open(post)} className="w-full text-left grid grid-cols-1 md:grid-cols-[110px_1fr_60px_90px_110px] gap-1 md:gap-2 px-3 py-3 border-t-2 border-black items-center hover:bg-blue-50"><span className="font-mono text-xs">#{post.id} {new Date(post.date).toLocaleDateString('zh-TW')}</span><span className="min-w-0"><b className="block truncate">{post.title}</b><small className="block truncate text-gray-500">{post.content}</small></span><span className="text-xs font-black">{post.image?'有':'—'}</span><span><b className={`px-2 py-1 border-2 border-black text-xs ${post.status==='pending'?'bg-yellow-300':post.status==='rejected'?'bg-red-300':'bg-green-300'}`}>{post.status}</b></span><span className="font-mono text-[10px] text-gray-500 truncate">{post.ip || '—'}</span></button>) : <div className="p-10 text-center font-bold text-gray-500">目前沒有資料 ✦</div>}</div>
+    <div className="flex justify-between text-sm font-black"><span>第 {pagination?.page||1} / {pagination?.totalPages||1} 頁，共 {pagination?.total||0} 筆</span><div className="flex gap-2"><button disabled={(pagination?.page||1)<=1} onClick={() => setFilters(c=>({...c,page:c.page-1}))} className="border-2 border-black px-2 py-1 disabled:opacity-40">上一頁</button><button disabled={(pagination?.page||1)>=(pagination?.totalPages||1)} onClick={() => setFilters(c=>({...c,page:c.page+1}))} className="border-2 border-black px-2 py-1 disabled:opacity-40">下一頁</button></div></div>
+    {detail && <div className="fixed inset-0 bg-black/70 z-[90] flex items-center justify-center p-3" onClick={() => setDetail(null)}><div className="bg-white w-full max-w-3xl border-4 border-black max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}><div className="bg-black text-white p-3 flex justify-between font-black">投稿 #{detail.id}<button onClick={()=>setDetail(null)}>x</button></div><div className="p-4 grid md:grid-cols-2 gap-4"><div><PostCardRenderer title={detail.title} content={detail.content} image={detail.image} date={detail.date}/></div><div className="font-mono text-xs space-y-3"><div className="border-2 border-black p-3 space-y-1"><p>狀態：{detail.status}</p><p>時間：{new Date(detail.date).toLocaleString('zh-TW',{hour12:false})}</p><p>IP：{detail.ip || '未記錄'}</p><p className="break-all">User-Agent：{detail.userAgent || '未記錄'}</p></div><div className="border-2 border-black p-3"><p className="font-black flex items-center gap-1"><History size={14}/> 審核歷史</p>{(detail.history||[]).map(h=><p key={h.id}>{new Date(h.createdAt).toLocaleString('zh-TW',{hour12:false})} {h.fromStatus||'pending'} → {h.toStatus}</p>)}</div><div className="flex gap-2"><button onClick={async()=>{await api.put(`/admin/posts/${detail.id}/status`,{status:'approved'});setDetail(null);onRefresh();}} className="flex-1 bg-blue-600 text-white border-2 border-black py-2 font-black">通過</button><button onClick={async()=>{await api.put(`/admin/posts/${detail.id}/status`,{status:'rejected'});setDetail(null);onRefresh();}} className="flex-1 bg-red-500 text-white border-2 border-black py-2 font-black">拒絕</button></div></div></div></div></div>}
+  </div>;
 };
 
 const AdminDashboard = ({ stats, igStatus, loading, error, onRetry }) => {
@@ -430,6 +455,7 @@ const TianmuAnonymous = () => {
   const fileInputRef = useRef(null);
 
   const [posts, setPosts] = useState([]);
+  const [policyPage, setPolicyPage] = useState(null);
   const [postPagination, setPostPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [postFilters, setPostFilters] = useState({ status: 'pending', type: '', q: '', from: '', to: '', page: 1, pageSize: 20 });
   const [dashboardStats, setDashboardStats] = useState(null);
@@ -487,13 +513,13 @@ const TianmuAnonymous = () => {
   }, []);
 
   useEffect(() => {
-    if (showEditor || isSidebarOpen || isMenuOpen) {
+    if (showEditor || isSidebarOpen || isMenuOpen || policyPage) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [showEditor, isSidebarOpen, isMenuOpen]);
+  }, [showEditor, isSidebarOpen, isMenuOpen, policyPage]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -895,7 +921,7 @@ const TianmuAnonymous = () => {
           <main className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
               {adminTab === 'dashboard' && <AdminDashboard stats={dashboardStats} igStatus={igStatus} loading={dashboardLoading} error={dashboardError} onRetry={() => fetchData()} />}
-              {adminTab === 'review' && <AdminReview posts={posts} pagination={postPagination} filters={postFilters} setFilters={setPostFilters} handleStatusChange={handleStatusChange} handleSaveEdit={handleSaveEdit} handleDownloadIGImage={handleDownloadIGImage} handleCopyIGTitle={handleCopyIGTitle} />}
+              {adminTab === 'review' && <AdminReviewCompact posts={posts} pagination={postPagination} filters={postFilters} setFilters={setPostFilters} onRefresh={() => fetchData()} />}
               {adminTab === 'settings' && <AdminSettings settings={settings} setSettings={setSettings} igStatus={igStatus} handleIgConnect={handleIgConnect} handleIgDisconnect={handleIgDisconnect} />}
               {adminTab === 'logs' && <AdminLogs logs={logs} />}
             </div>
@@ -1329,6 +1355,9 @@ const TianmuAnonymous = () => {
           
           <div className="flex flex-col items-center md:items-end gap-2 md:gap-3 text-xs md:text-sm font-bold text-gray-400 w-full md:w-auto">
             <div className="flex flex-wrap justify-center md:justify-end gap-4 md:gap-6 mb-1">
+              <button onClick={() => setPolicyPage('guidelines')} className="font-mono text-white hover:text-blue-400">社群守則</button>
+              <button onClick={() => setPolicyPage('terms')} className="font-mono text-white hover:text-blue-400">使用條款</button>
+              <button onClick={() => setPolicyPage('privacy')} className="font-mono text-white hover:text-blue-400">隱私政策</button>
               <a href="mailto:tmjh.new@gmail.com" className="flex items-center gap-1.5 md:gap-2 hover:text-blue-400 transition-colors cursor-pointer text-white">
                 <span className="font-mono break-all">tmjh.new@gmail.com</span>
               </a>
@@ -1427,6 +1456,7 @@ const TianmuAnonymous = () => {
           </div>
         </div>
       )}
+      {policyPage && <PolicyModal page={policyPage} onClose={() => setPolicyPage(null)} />}
     </div>
   );
 };
